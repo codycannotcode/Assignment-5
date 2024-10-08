@@ -1,0 +1,32 @@
+<program> -> <stmts>
+<stmts> -> <stmt> | <stmt> \n <stmts>
+<stmt> -> <assign> | <print> | <if> | <while>
+
+<assign> -> var <identifier> = <expression>
+<print> -> print(<expression>)
+<if> ->
+    if (<bool_expr>) \n <stmts> \n end |
+    if (<bool_expr>) <stmt> end
+<while> ->
+    while (<bool_expr>) \n <stmts> \n end |
+    while (<bool_expr>) <stmt> end
+<for> ->
+    for (<assign>, <bool_expr>, <stmt>) \n <stmts> \n end
+
+<identifier> -> letter {(letter | numeral)}
+
+<expression> -> <bool_expr> | <int_expr> | <string_expr>
+
+<bool_expr> -> 
+    [!]<bool> |
+    <bool_expr> <logical_optr> <bool_expr> |
+    <int_expr> <comparison_optr> <int_expr>
+<bool> -> true | false
+<logical_optr> -> and | not
+<comparison_optr> -> == | != | <{=} | >{=}
+
+<int_expr> -> [+|-]<int> | <int_expr> <mathematical_optr> <int_expr>
+<int> -> numeral {numeral}
+<mathematical_optr> -> + | - | * | / | %
+
+<string_expr> -> "{non " character}"

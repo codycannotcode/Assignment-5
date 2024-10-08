@@ -1,0 +1,44 @@
+EXPRESSIONS:
+    Mathematical Expressions:
+
+        Number Literal:
+        <num> -> (num)
+
+        Operation:
+        <num> <symbol> <num> -> (num)
+        symbols: + - / * %
+        
+
+    Boolean Expressions:
+
+        Boolean Literal:
+        <(!)true/false> -> (boolean)
+
+        Equality:
+
+        <num> <symbol> <num> -> (boolean)
+        symbols: < > == !=
+
+        Logical:
+
+        <bool> <symbol> <bool> -> (boolean)
+        symbols: and or
+
+    String Expressions:
+
+
+STATEMENTS:
+    Assignment:
+
+        var <identifier> = <identifier | num | boolean | string>
+        string has to have ""
+
+    If Statement:
+
+        if boolean_expression
+            body
+        end
+
+    Print Statement:
+
+        print(string)
