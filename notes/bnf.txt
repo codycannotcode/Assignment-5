@@ -1,8 +1,9 @@
 <program> -> <stmts>
 <stmts> -> <stmt> | <stmt> \n <stmts>
-<stmt> -> <assign> | <print> | <if> | <while>
+<stmt> -> <declare> | <assign> | <print> | <if> | <while>
 
-<assign> -> var <identifier> = <expression>
+<declare> -> var <identifier> = <expression>
+<assign> -> <identifier> = <expression>
 <print> -> print(<expression>)
 <if> ->
     if (<bool_expr>) \n <stmts> \n end |
@@ -11,7 +12,7 @@
     while (<bool_expr>) \n <stmts> \n end |
     while (<bool_expr>) <stmt> end
 <for> ->
-    for (<assign>, <bool_expr>, <stmt>) \n <stmts> \n end
+    for (<declare>, <bool_expr>, <stmt>) \n <stmts> \n end
 
 <identifier> -> letter {(letter | numeral)}
 

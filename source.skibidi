@@ -1,11 +1,3 @@
 var hi = 4
 var bye = true
-var hello = "hey"
 var greeting = hello
-
-if (bye)
-{
-    if (bye)
-    {
-    }
-}
