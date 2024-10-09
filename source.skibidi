@@ -3,6 +3,9 @@ var bye = true
 var hello = "hey"
 var greeting = hello
 
-if bye
-    print(hello)
-    print(hi)
+if (bye)
+{
+    if (bye)
+    {
+    }
+}
