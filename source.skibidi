@@ -1,3 +1,4 @@
-var hi = 4
-var bye = true
-var greeting = hello
+var a = 4
+print(a)
+a = 5
+print(a)
