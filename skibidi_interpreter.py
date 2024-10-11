@@ -21,7 +21,7 @@ def get_lexeme(code: str, start: int) -> Tuple[Lexeme, int]:
             end = len(code)
         lex = check_keyword(code[start:end])
         return lex, end
-    elif code[start].isnumeric() or code[start] == '+' or code[start] == '-':
+    elif code[start].isnumeric() or ((code[start] == '+' or code[start] == '-') and code[start+1].isnumeric()):
         end = start + 1
         for i in range(end, len(code)):
             char = code[i]
@@ -158,6 +158,30 @@ def parse_expression(parts: List[Lexeme]):
                 pass #TODO: ERROR identifier not found
         else:
             pass #TODO: ERROR invalid expression
+    elif len(parts) == 3: #TODO TODO TODO CHANGE THIS LMAO <--------------------------------------
+        term1 = parse_expression([parts[0]])
+        operator = parts[1]
+        term2 = parse_expression([parts[2]])
+        return parse_operation(term1, term2, operator)
+
+def parse_operation(term1: Lexeme, term2: Lexeme, operator: Lexeme):
+    operations = {
+        '+': lambda t1, t2: t1 + t2,
+        '-': lambda t1, t2: t1 - t2,
+        '*': lambda t1, t2: t1 * t2,
+        '/': lambda t1, t2: t1 / t2,
+        '%': lambda t1, t2: t1 % t2,
+        '==': lambda t1, t2: t1 == t2,
+        '<': lambda t1, t2: t1 < t2,
+        '>': lambda t1, t2: t1 > t2,
+        '<=': lambda t1, t2: t1 <= t2,
+        '>=': lambda t1, t2: t1 >= t2,
+        '!=': lambda t1, t2: t1 != t2,
+        'and': lambda t1, t2: t1 and t2,
+        'or': lambda t1, t2: t1 or t2
+    }
+
+    return operations.get(operator.lexeme)(term1, term2)
 
 def is_line_end(lex: Lexeme):
     return lex.token is Token.NEWLINE
