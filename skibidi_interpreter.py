@@ -86,16 +86,25 @@ def code_to_lexemes(code: str) -> List[Lexeme]:
 def parse_program(lexemes: List[Lexeme]):
     i = 0
     while i < len(lexemes):
-        lex = lexemes[i]
-        match lex.token:
+        i = parse_statement(lexemes, i)
+
+def parse_statement(lexemes: List[Lexeme], start: int) -> int:
+    lex = lexemes[start]
+    match lex.token:
             case Token.KEYWORD if lex.lexeme == 'var':
-                i = parse_declare(lexemes, i)
+                return parse_declare(lexemes, start)
             case Token.KEYWORD if lex.lexeme == 'print':
-                i = parse_print(lexemes, i)
+                return parse_print(lexemes, start)
+            case Token.KEYWORD if lex.lexeme == 'if':
+                return parse_if(lexemes, start)
+            case Token.KEYWORD if lex.lexeme == 'while':
+                return parse_while(lexemes, start)
             case Token.IDENTIFIER:
-                i = parse_assign(lexemes, i)
+                return parse_assign(lexemes, start)
             case Token.NEWLINE:
-                i += 1
+                return start + 1
+            case Token.KEYWORD if lex.lexeme == 'end':
+                return start + 1
             case _:
                 raise RuntimeError()
 
@@ -108,11 +117,7 @@ def parse_declare(lexemes: List[Lexeme], start: int) -> int:
     operator = lexemes[start+2]
     if operator.lexeme != '=':
         pass #TODO ERROR: expected "=" symbol for assignment
-    expression_parts: List[Lexeme] = []
-    for lex in lexemes[start+3:]:
-        if is_line_end(lex):
-            break
-        expression_parts.append(lex)
+    expression_parts: List[Lexeme] = build_expression(lexemes, start+3)
     expression = parse_expression(expression_parts)
     varmap[identifier.lexeme] = expression
     return start + 3 + len(expression_parts)
@@ -124,11 +129,7 @@ def parse_assign(lexemes: List[Lexeme], start: int) -> int:
     operator = lexemes[start+1]
     if operator.lexeme != '=':
         pass #TODO ERROR
-    expression_parts: List[Lexeme] = []
-    for lex in lexemes[start+2:]:
-        if is_line_end(lex):
-            break
-        expression_parts.append(lex)
+    expression_parts: List[Lexeme] = build_expression(lexemes, start+2)
     expression = parse_expression(expression_parts)
     varmap[var.lexeme] = expression
     return start + 2 + len(expression_parts)
@@ -137,14 +138,68 @@ def parse_print(lexemes: List[Lexeme], start: int) -> int:
     left_parenthesis = lexemes[start+1]
     if left_parenthesis.lexeme != '(':
         pass #TODO: ERROR
-    expression_parts: List[Lexeme] = []
-    for lex in lexemes[start+2:]:
-        if lex.lexeme == ')':
-            break
-        expression_parts.append(lex)
+    expression_parts = build_expression(lexemes, start+2)
     expression = parse_expression(expression_parts)
     print(expression)
     return start + 3 + len(expression_parts)
+
+def parse_if(lexemes: List[Lexeme], start: int) -> int:
+    left_parenthesis = lexemes[start+1]
+    expression_parts = build_expression(lexemes, start+2)
+    right_parenthesis = lexemes[start+2+len(expression_parts)]
+
+    expression = parse_expression(expression_parts)
+    if expression is True:
+        return start + 3 + len(expression_parts)
+    elif expression is False:
+        end_index = find_end(lexemes, start+3+len(expression_parts))
+        return end_index + 1
+    else:
+        pass #TODO ERROR
+
+def parse_while(lexemes: List[Lexeme], start: int) -> int:
+    left_parenthesis = lexemes[start+1]
+    expression_parts = build_expression(lexemes, start+2)
+    right_parenthesis = lexemes[start+2+len(expression_parts)]
+    body_index = start + 3 + len(expression_parts)
+
+    end_index = find_end(lexemes, start+3+len(expression_parts))
+    expression = parse_expression(expression_parts)
+    while expression is True:
+        i = body_index
+        while i < end_index:
+            i = parse_statement(lexemes, i)
+        expression = parse_expression(expression_parts)
+    return end_index + 1
+
+# finds the index of the corresponding "end" keyword. used for if statements and loops
+def find_end(lexemes: List[Lexeme], start: int) -> int:
+    open_keywords = ['if', 'while', 'for']
+    opened = 0
+    index = start
+    for lex in lexemes[start:]:
+        if lex.lexeme in open_keywords:
+            opened += 1
+        if lex.lexeme == 'end' and opened <= 0:
+            return index
+        if lex.lexeme == 'end' and opened > 0:
+            opened -= 1
+        index += 1
+    
+def build_expression(lexemes: List[Lexeme], start: int) -> List[Lexeme]:
+    expression = []
+    parentheses = 0
+    for lex in lexemes[start:]:
+        if lex.token == Token.NEWLINE:
+            return expression
+        elif lex.lexeme == ')' and parentheses <= 0:
+            return expression
+        elif lex.lexeme == ')' and parentheses > 0:
+            parentheses -= 1
+        elif lex.lexeme == '(':
+            parentheses += 1
+        expression.append(lex)
+    return expression
 
 def parse_expression(parts: List[Lexeme]):
     if len(parts) == 1:
@@ -182,9 +237,6 @@ def parse_operation(term1: Lexeme, term2: Lexeme, operator: Lexeme):
     }
 
     return operations.get(operator.lexeme)(term1, term2)
-
-def is_line_end(lex: Lexeme):
-    return lex.token is Token.NEWLINE
 
 def main():
     with open(file_path, 'r') as file:

@@ -1,24 +1,5 @@
-var a = 4 + 2
-print(a)
-a = 2 - 1
-print(a)
-a = 4 * 3
-print(a)
-a = 8 / 2
-print(a)
-a = 2 == 2
-print(a)
-a = 3 < 4
-print(a)
-a = 2 > 1
-print(a)
-a = 3 <= 3
-print(a)
-a = 5 >= 4
-print(a)
-a = 9 != 3
-print(a)
-a = true and true
-print(a)
-a = false or true
-print(a)
+var i = 0
+while (i < 10)
+    print(i)
+    i = i + 2
+end
