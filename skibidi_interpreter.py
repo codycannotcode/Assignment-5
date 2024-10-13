@@ -1,15 +1,18 @@
-from typing import List, Tuple, Dict
+import sys
+from typing import List, Tuple
 from lexical import Lexeme, Token
 from varmap import VarMap
 
-keywords = ['true', 'false', 'if', 'while', 'for', 'var', 'and', 'or', 'end', 'print']
+sys.tracebacklimit = 0 # this is to hide python's traceback on errors
+
+keywords = ['true', 'false', 'if', 'elif', 'else', 'while', 'for', 'var', 'and', 'or', 'end', 'print']
 symbols = ['+', '-', '*', '/', '%', '!', '=', '<', '>', '==', '!=', '<=', '>=']
 punctuators = ['(', ')', '\"', ';']
 
 # varmap: Dict[str, any] = {}
 file_path = 'source.skibidi'
 
-def get_lexeme(code: str, start: int) -> Tuple[Lexeme, int]:
+def get_lexeme(code: str, start: int, line: int) -> Tuple[Lexeme, int]:
     if code[start].isalpha():
         end = start + 1
         for i in range(end, len(code)):
@@ -21,6 +24,7 @@ def get_lexeme(code: str, start: int) -> Tuple[Lexeme, int]:
             # if the for loop terminates normally, we're at the end of the code
             end = len(code)
         lex = check_keyword(code[start:end])
+        lex.line = line
         return lex, end
     elif code[start].isnumeric() or ((code[start] == '+' or code[start] == '-') and code[start+1].isnumeric()):
         end = start + 1
@@ -35,15 +39,15 @@ def get_lexeme(code: str, start: int) -> Tuple[Lexeme, int]:
         value = float(code[start:end])
         if value.is_integer():
             value = int(value)
-        lex = Lexeme(value, Token.LITERAL)
+        lex = Lexeme(value, Token.LITERAL, line)
         return lex, end
     elif code[start] == '\n':
-        return Lexeme('\n', Token.NEWLINE), start + 1
+        return Lexeme('\n', Token.NEWLINE, line), start + 1
     elif code[start] in symbols:
         end = start + 1
         if code[start:start+2] in ['==', '<=', '>=', '!=']:
             end = start + 2
-        return Lexeme(code[start:end], Token.OPERATOR), end
+        return Lexeme(code[start:end], Token.OPERATOR, line), end
     elif code[start] in punctuators and code[start] in ['\"', '\'']:
         open_char = code[start]
         end = start + 1
@@ -53,9 +57,9 @@ def get_lexeme(code: str, start: int) -> Tuple[Lexeme, int]:
                 break
         else:
             pass #TODO ERROR for unclosed string
-        return Lexeme(code[start+1:end], Token.LITERAL), end + 1
+        return Lexeme(code[start+1:end], Token.LITERAL, line), end + 1
     elif code[start] in punctuators:
-        return Lexeme(code[start], Token.PUNCTUATOR), start + 1
+        return Lexeme(code[start], Token.PUNCTUATOR, line), start + 1
     return Lexeme(), start + 1
 
 def check_keyword(lex: str) -> Lexeme:
@@ -75,14 +79,17 @@ def code_to_lexemes(code: str) -> List[Lexeme]:
     lexemes = []
 
     i = 0
+    line = 1
     while i < len(code):
         if code[i] == ' ':
             i += 1
             continue
-        lex, i = get_lexeme(code, i) 
+        lex, i = get_lexeme(code, i, line) 
+        if lex.token is Token.NEWLINE:
+            line += 1
         lexemes.append(lex)
 
-    [print(f'{i}: {lexeme}') for i, lexeme in enumerate(lexemes)]
+    # [print(f'{i}: {lexeme}') for i, lexeme in enumerate(lexemes)]
 
     return lexemes
 
@@ -111,10 +118,8 @@ def parse_statement(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
                 return parse_assign(lexemes, start, varmap)
             case Token.NEWLINE:
                 return start + 1
-            case Token.KEYWORD if lex.lexeme == 'end':
-                return start + 1
             case _:
-                raise RuntimeError()
+                raise SyntaxError('hi')
 
 def parse_declare(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     identifier = lexemes[start+1]
@@ -152,18 +157,36 @@ def parse_print(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     return start + 3 + len(expression_parts)
 
 def parse_if(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
-    left_parenthesis = lexemes[start+1]
-    expression_parts = build_expression(lexemes, start+2)
-    right_parenthesis = lexemes[start+2+len(expression_parts)]
+    keyword_index = start
+    start_execution = start
+    while lexemes[keyword_index].lexeme != 'end':
+        match lexemes[keyword_index].lexeme:
+            case 'if' | 'elif':
+                left_parenthesis = lexemes[keyword_index+1]
+                expression_parts = build_expression(lexemes, keyword_index+2)
+                right_parenthesis = lexemes[keyword_index+2+len(expression_parts)]
 
-    expression = parse_expression(expression_parts, varmap)
-    if expression is True:
-        return start + 3 + len(expression_parts)
-    elif expression is False:
-        end_index = find_end(lexemes, start+3+len(expression_parts))
+                expression = parse_expression(expression_parts, varmap)
+                if expression is True:
+                    start_execution = keyword_index + 3 + len(expression_parts)
+                    break
+                elif expression is False:
+                    keyword_index = find_end(lexemes, keyword_index + 3 + len(expression_parts), True)
+                else:
+                    pass #TODO ERROR expected bool
+            case 'else':
+                start_execution = keyword_index + 1
+                break
+    i = start_execution
+    end_index = find_end(lexemes, i, True)
+    varmap.open_scope()
+    while i < end_index:
+        i = parse_statement(lexemes, i, varmap)
+    varmap.close_scope()
+    if lexemes[end_index] == 'end':
         return end_index + 1
     else:
-        pass #TODO ERROR
+        return find_end(lexemes, end_index) + 1
 
 def parse_while(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     left_parenthesis = lexemes[start+1]
@@ -209,16 +232,18 @@ def parse_for(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     return end_index + 1
 
 # finds the index of the corresponding "end" keyword. used for if statements and loops
-def find_end(lexemes: List[Lexeme], start: int) -> int:
+def find_end(lexemes: List[Lexeme], start: int, include_elif: bool = False) -> int:
     open_keywords = ['if', 'while', 'for']
     opened = 0
     index = start
     for lex in lexemes[start:]:
         if lex.lexeme in open_keywords:
             opened += 1
-        if lex.lexeme == 'end' and opened <= 0:
+        elif lex.lexeme == 'end' and opened <= 0:
             return index
-        if lex.lexeme == 'end' and opened > 0:
+        elif include_elif and opened <= 0 and (lex.lexeme == 'elif' or lex.lexeme == 'else'):
+            return index
+        elif lex.lexeme == 'end' and opened > 0:
             opened -= 1
         index += 1
     

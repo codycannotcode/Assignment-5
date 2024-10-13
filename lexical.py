@@ -13,6 +13,7 @@ class Token(Enum):
 class Lexeme:
     lexeme: str | int | bool | float = field(default=None)
     token: Token = field(default=None)
+    line: int = field(default=0)
 
     # returns True if operator1 has lower precedence than operator2
     @staticmethod
@@ -37,4 +38,4 @@ class Lexeme:
         return precedence[operator1] < precedence[operator2]
 
     def __repr__(self) -> str:
-        return f"({self.token}: {repr(self.lexeme)})"
+        return f"({self.token}: {repr(self.lexeme)}, line {self.line})"
