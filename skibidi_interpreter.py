@@ -1,11 +1,12 @@
 from typing import List, Tuple, Dict
 from lexical import Lexeme, Token
+from varmap import VarMap
 
 keywords = ['true', 'false', 'if', 'while', 'for', 'var', 'and', 'or', 'end', 'print']
 symbols = ['+', '-', '*', '/', '%', '!', '=', '<', '>', '==', '!=', '<=', '>=']
-punctuators = ['(', ')', '\"',]
+punctuators = ['(', ')', '\"', ';']
 
-varmap: Dict[str, any] = {}
+# varmap: Dict[str, any] = {}
 file_path = 'source.skibidi'
 
 def get_lexeme(code: str, start: int) -> Tuple[Lexeme, int]:
@@ -85,22 +86,27 @@ def code_to_lexemes(code: str) -> List[Lexeme]:
 
 def parse_program(lexemes: List[Lexeme]):
     i = 0
+    varmap = VarMap()
     while i < len(lexemes):
-        i = parse_statement(lexemes, i)
+        i = parse_statement(lexemes, i, varmap)
+    
+    print(varmap)
 
-def parse_statement(lexemes: List[Lexeme], start: int) -> int:
+def parse_statement(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     lex = lexemes[start]
     match lex.token:
             case Token.KEYWORD if lex.lexeme == 'var':
-                return parse_declare(lexemes, start)
+                return parse_declare(lexemes, start, varmap)
             case Token.KEYWORD if lex.lexeme == 'print':
-                return parse_print(lexemes, start)
+                return parse_print(lexemes, start, varmap)
             case Token.KEYWORD if lex.lexeme == 'if':
-                return parse_if(lexemes, start)
+                return parse_if(lexemes, start, varmap)
             case Token.KEYWORD if lex.lexeme == 'while':
-                return parse_while(lexemes, start)
+                return parse_while(lexemes, start, varmap)
+            case Token.KEYWORD if lex.lexeme == 'for':
+                return parse_for(lexemes, start, varmap)
             case Token.IDENTIFIER:
-                return parse_assign(lexemes, start)
+                return parse_assign(lexemes, start, varmap)
             case Token.NEWLINE:
                 return start + 1
             case Token.KEYWORD if lex.lexeme == 'end':
@@ -108,7 +114,7 @@ def parse_statement(lexemes: List[Lexeme], start: int) -> int:
             case _:
                 raise RuntimeError()
 
-def parse_declare(lexemes: List[Lexeme], start: int) -> int:
+def parse_declare(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     identifier = lexemes[start+1]
     if identifier.token is not Token.IDENTIFIER:
         pass #TODO ERROR: invalid identifier
@@ -118,11 +124,11 @@ def parse_declare(lexemes: List[Lexeme], start: int) -> int:
     if operator.lexeme != '=':
         pass #TODO ERROR: expected "=" symbol for assignment
     expression_parts: List[Lexeme] = build_expression(lexemes, start+3)
-    expression = parse_expression(expression_parts)
-    varmap[identifier.lexeme] = expression
+    expression = parse_expression(expression_parts, varmap)
+    varmap.create_var(identifier.lexeme, expression)
     return start + 3 + len(expression_parts)
 
-def parse_assign(lexemes: List[Lexeme], start: int) -> int:
+def parse_assign(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     var = lexemes[start]
     if var.lexeme not in varmap:
         pass #TODO: ERROR identifier not found
@@ -130,25 +136,25 @@ def parse_assign(lexemes: List[Lexeme], start: int) -> int:
     if operator.lexeme != '=':
         pass #TODO ERROR
     expression_parts: List[Lexeme] = build_expression(lexemes, start+2)
-    expression = parse_expression(expression_parts)
+    expression = parse_expression(expression_parts, varmap)
     varmap[var.lexeme] = expression
     return start + 2 + len(expression_parts)
 
-def parse_print(lexemes: List[Lexeme], start: int) -> int:
+def parse_print(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     left_parenthesis = lexemes[start+1]
     if left_parenthesis.lexeme != '(':
         pass #TODO: ERROR
     expression_parts = build_expression(lexemes, start+2)
-    expression = parse_expression(expression_parts)
+    expression = parse_expression(expression_parts, varmap)
     print(expression)
     return start + 3 + len(expression_parts)
 
-def parse_if(lexemes: List[Lexeme], start: int) -> int:
+def parse_if(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     left_parenthesis = lexemes[start+1]
     expression_parts = build_expression(lexemes, start+2)
     right_parenthesis = lexemes[start+2+len(expression_parts)]
 
-    expression = parse_expression(expression_parts)
+    expression = parse_expression(expression_parts, varmap)
     if expression is True:
         return start + 3 + len(expression_parts)
     elif expression is False:
@@ -157,19 +163,47 @@ def parse_if(lexemes: List[Lexeme], start: int) -> int:
     else:
         pass #TODO ERROR
 
-def parse_while(lexemes: List[Lexeme], start: int) -> int:
+def parse_while(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     left_parenthesis = lexemes[start+1]
     expression_parts = build_expression(lexemes, start+2)
     right_parenthesis = lexemes[start+2+len(expression_parts)]
     body_index = start + 3 + len(expression_parts)
 
-    end_index = find_end(lexemes, start+3+len(expression_parts))
-    expression = parse_expression(expression_parts)
+    end_index = find_end(lexemes, body_index)
+    expression = parse_expression(expression_parts, varmap)
     while expression is True:
         i = body_index
+        varmap.open_scope()
         while i < end_index:
-            i = parse_statement(lexemes, i)
-        expression = parse_expression(expression_parts)
+            i = parse_statement(lexemes, i, varmap)
+        varmap.close_scope()
+        expression = parse_expression(expression_parts, varmap)
+    
+    return end_index + 1
+
+def parse_for(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
+    varmap.open_scope() # dumb solution, but this is so the variable declared in for loop gets deleted
+
+    left_parenthesis = lexemes[start+1]
+    semicolon1_index = parse_statement(lexemes, start + 2, varmap) # declare variable
+    expression_parts = build_expression(lexemes, semicolon1_index + 1)
+    semicolon2_index = len(expression_parts) + semicolon1_index + 1
+    statement_index = semicolon2_index + 1
+    body_index = statement_index + 1 + len(build_expression(lexemes, statement_index))
+    # uses build_expression() to find ')'
+
+    end_index = find_end(lexemes, body_index)
+    expression = parse_expression(expression_parts, varmap)
+    while expression is True:
+        i = body_index
+        varmap.open_scope()
+        while i < end_index:
+            i = parse_statement(lexemes, i, varmap)
+        varmap.close_scope()
+        parse_statement(lexemes, statement_index, varmap)
+        expression = parse_expression(expression_parts, varmap)
+
+    varmap.close_scope()
     return end_index + 1
 
 # finds the index of the corresponding "end" keyword. used for if statements and loops
@@ -190,7 +224,7 @@ def build_expression(lexemes: List[Lexeme], start: int) -> List[Lexeme]:
     expression = []
     parentheses = 0
     for lex in lexemes[start:]:
-        if lex.token == Token.NEWLINE:
+        if lex.token == Token.NEWLINE or lex.lexeme == ';':
             return expression
         elif lex.lexeme == ')' and parentheses <= 0:
             return expression
@@ -201,7 +235,7 @@ def build_expression(lexemes: List[Lexeme], start: int) -> List[Lexeme]:
         expression.append(lex)
     return expression
 
-def parse_expression(parts: List[Lexeme]):
+def parse_expression(parts: List[Lexeme], varmap: VarMap):
     if len(parts) == 1:
         lex = parts[0]
         if lex.token is Token.LITERAL:
@@ -214,9 +248,9 @@ def parse_expression(parts: List[Lexeme]):
         else:
             pass #TODO: ERROR invalid expression
     elif len(parts) == 3: #TODO TODO TODO CHANGE THIS LMAO <--------------------------------------
-        term1 = parse_expression([parts[0]])
+        term1 = parse_expression([parts[0]], varmap)
         operator = parts[1]
-        term2 = parse_expression([parts[2]])
+        term2 = parse_expression([parts[2]], varmap)
         return parse_operation(term1, term2, operator)
 
 def parse_operation(term1: Lexeme, term2: Lexeme, operator: Lexeme):
@@ -248,7 +282,6 @@ def main():
         lexemes: List[Lexeme] = code_to_lexemes(code)
         print('--parsing--')
         parse_program(lexemes)
-        print(varmap)
         print('--done parsing--')
 
 if __name__ == '__main__':

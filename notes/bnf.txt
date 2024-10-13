@@ -12,7 +12,7 @@
     while (<bool_expr>) \n <stmts> \n end |
     while (<bool_expr>) <stmt> end
 <for> ->
-    for (<declare>, <bool_expr>, <stmt>) \n <stmts> \n end
+    for (<declare>; <bool_expr>; <stmt>) \n <stmts> \n end
 
 <identifier> -> letter {(letter | numeral)}
 
