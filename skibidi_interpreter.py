@@ -66,6 +66,8 @@ def check_keyword(lex: str) -> Lexeme:
             return Lexeme(True, Token.LITERAL)
         case 'false':
             return Lexeme(False, Token.LITERAL)
+        case 'and' | 'or':
+            return Lexeme(lex, Token.OPERATOR)
         case _:
             return Lexeme(lex, Token.KEYWORD)
 
@@ -235,25 +237,40 @@ def build_expression(lexemes: List[Lexeme], start: int) -> List[Lexeme]:
         expression.append(lex)
     return expression
 
+# https://en.wikipedia.org/wiki/Shunting_yard_algorithm
+# SHOUTOUT TO DIJKSTRA THE GOAT
 def parse_expression(parts: List[Lexeme], varmap: VarMap):
-    if len(parts) == 1:
-        lex = parts[0]
-        if lex.token is Token.LITERAL:
-            return lex.lexeme
-        elif lex.token is Token.IDENTIFIER:
-            if lex.lexeme in varmap:
-                return varmap[lex.lexeme]
-            else:
-                pass #TODO: ERROR identifier not found
-        else:
-            pass #TODO: ERROR invalid expression
-    elif len(parts) == 3: #TODO TODO TODO CHANGE THIS LMAO <--------------------------------------
-        term1 = parse_expression([parts[0]], varmap)
-        operator = parts[1]
-        term2 = parse_expression([parts[2]], varmap)
-        return parse_operation(term1, term2, operator)
+    output_stack: List[Lexeme] = []
+    operator_stack: List[Lexeme] = []
 
-def parse_operation(term1: Lexeme, term2: Lexeme, operator: Lexeme):
+    for lex in parts:
+        if lex.token is Token.LITERAL:
+            output_stack.append(lex.lexeme)
+        elif lex.token is Token.IDENTIFIER:
+            # assert that [identifier] is in varmap
+            output_stack.append(varmap[lex.lexeme])
+        elif lex.token is Token.OPERATOR:
+            while operator_stack and operator_stack[-1] != '(' and Lexeme.has_lower_precedence(lex.lexeme, operator_stack[-1]):
+                
+                # output_stack.append(operator_stack.pop())
+                result = parse_operation(output_stack, operator_stack.pop())
+                output_stack.append(result)
+            operator_stack.append(lex.lexeme)
+        elif lex.lexeme == '(':
+            operator_stack.append(lex.lexeme)
+        elif lex.lexeme == ')':
+            while operator_stack[-1] != '(':
+                # output_stack.append(operator_stack.pop())
+                result = parse_operation(output_stack, operator_stack.pop())
+                output_stack.append(result)
+            #assert there is a left parenthesis at the top of the operator stack
+            operator_stack.pop()
+    for operator in operator_stack[::-1]:
+        result = parse_operation(output_stack, operator)
+        output_stack.append(result)
+    return output_stack[0]
+
+def parse_operation(output_stack: List[Lexeme], operator: str):
     operations = {
         '+': lambda t1, t2: t1 + t2,
         '-': lambda t1, t2: t1 - t2,
@@ -270,7 +287,12 @@ def parse_operation(term1: Lexeme, term2: Lexeme, operator: Lexeme):
         'or': lambda t1, t2: t1 or t2
     }
 
-    return operations.get(operator.lexeme)(term1, term2)
+    if operator == '!':
+        return not output_stack.pop()
+    else:
+        term2 = output_stack.pop()
+        term1 = output_stack.pop()
+        return operations[operator](term1, term2)
 
 def main():
     with open(file_path, 'r') as file:

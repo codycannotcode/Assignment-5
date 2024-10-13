@@ -14,9 +14,9 @@ class Lexeme:
     lexeme: str | int | bool | float = field(default=None)
     token: Token = field(default=None)
 
-    # returns True if operator1 has a higher precedence than operator2
+    # returns True if operator1 has lower precedence than operator2
     @staticmethod
-    def has_higher_precedence(operator1: str, operator2: str):
+    def has_lower_precedence(operator1: str, operator2: str):
         # operators with a higher number have higher precedence
         precedence = {
             '*': 5,
@@ -30,11 +30,11 @@ class Lexeme:
             '>=': 3,
             '!=': 3,
             '==': 3,
-            'not': 2,
+            '!': 2,
             'and': 1,
             'or': 0
         }
-        return precedence[operator1] > precedence[operator2]
+        return precedence[operator1] < precedence[operator2]
 
     def __repr__(self) -> str:
         return f"({self.token}: {repr(self.lexeme)})"
