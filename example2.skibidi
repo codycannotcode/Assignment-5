@@ -1,0 +1,13 @@
+print("Going through all coordinates on an 5x5 board")
+for (var i = 1; i <= 5; i = i + 1)
+    for (var j = 1; j <= 5; j = j + 1)
+        print("(" + i + ", " + j + ")")
+    end
+end
+
+print("Did you know if statements have their own scope?")
+if (true)
+    var greeting = "ciao"
+    print(greeting)
+end
+print(greeting)

@@ -7,17 +7,15 @@ sys.tracebacklimit = 0 # this is to hide python's traceback on errors
 
 keywords = ['true', 'false', 'if', 'elif', 'else', 'while', 'for', 'var', 'and', 'or', 'end', 'print']
 symbols = ['+', '-', '*', '/', '%', '!', '=', '<', '>', '==', '!=', '<=', '>=']
-punctuators = ['(', ')', '\"', ';']
+punctuators = ['(', ')', '\"', '\'', ';']
 
-# varmap: Dict[str, any] = {}
-file_path = 'source.skibidi'
 
 def get_lexeme(code: str, start: int, line: int) -> Tuple[Lexeme, int]:
     if code[start].isalpha():
         end = start + 1
         for i in range(end, len(code)):
             char = code[i]
-            if not char.isidentifier():
+            if not (char.isalpha() or char.isnumeric() or char == '_'):
                 end = i
                 break
         else:
@@ -35,8 +33,12 @@ def get_lexeme(code: str, start: int, line: int) -> Tuple[Lexeme, int]:
                 break
         else:
             end = len(code)
-        #TODO: catch error here if invalid number
-        value = float(code[start:end])
+        try:
+            value = float(code[start:end])
+        except ValueError:
+            raise SyntaxError(f'Line {line}: invalid syntax for number') from None
+        # "from None" hides the message "During handling of the above exception, another exception occurred"
+        # probably a bad way to do it but i don't have time to look into it
         if value.is_integer():
             value = int(value)
         lex = Lexeme(value, Token.LITERAL, line)
@@ -51,16 +53,21 @@ def get_lexeme(code: str, start: int, line: int) -> Tuple[Lexeme, int]:
     elif code[start] in punctuators and code[start] in ['\"', '\'']:
         open_char = code[start]
         end = start + 1
+        found_close = False
         for i in range(end, len(code)):
             if code[i] == open_char:
                 end = i
+                found_close = True
                 break
-        else:
-            pass #TODO ERROR for unclosed string
+            elif code[i] == '\n':
+                end = i
+        if not found_close:
+            raise SyntaxError(f'Line {line}: unclosed string literal')
         return Lexeme(code[start+1:end], Token.LITERAL, line), end + 1
     elif code[start] in punctuators:
         return Lexeme(code[start], Token.PUNCTUATOR, line), start + 1
-    return Lexeme(), start + 1
+    else:
+        raise SyntaxError(f'Line {line}: invalid syntax')
 
 def check_keyword(lex: str) -> Lexeme:
     if lex not in keywords:
@@ -99,7 +106,7 @@ def parse_program(lexemes: List[Lexeme]):
     while i < len(lexemes):
         i = parse_statement(lexemes, i, varmap)
     
-    print(varmap)
+    # print(varmap)
 
 def parse_statement(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     lex = lexemes[start]
@@ -119,17 +126,26 @@ def parse_statement(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
             case Token.NEWLINE:
                 return start + 1
             case _:
-                raise SyntaxError('hi')
+                raise SyntaxError(f'Line {lex.line}: invalid syntax for statement')
 
 def parse_declare(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
+    if start + 1 >= len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected identifier')
+    
     identifier = lexemes[start+1]
     if identifier.token is not Token.IDENTIFIER:
-        pass #TODO ERROR: invalid identifier
+        raise SyntaxError(f'Line {lexemes[start].line}: expected identifier')
     elif identifier.lexeme in varmap:
-        pass #TODO ERROR: identifier already taken
+        raise NameError(f'Line {lexemes[start].line}: identifier "{identifier.lexeme}" already taken')
+    
+    if start + 2 >= len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected "=" for declaration')
     operator = lexemes[start+2]
     if operator.lexeme != '=':
-        pass #TODO ERROR: expected "=" symbol for assignment
+        raise SyntaxError(f'Line {lexemes[start].line}: expected "=" for declaration')
+    
+    if start + 3 >= len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected expression')
     expression_parts: List[Lexeme] = build_expression(lexemes, start+3)
     expression = parse_expression(expression_parts, varmap)
     varmap.create_var(identifier.lexeme, expression)
@@ -138,19 +154,33 @@ def parse_declare(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
 def parse_assign(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     var = lexemes[start]
     if var.lexeme not in varmap:
-        pass #TODO: ERROR identifier not found
+        raise SyntaxError(f'Line {lexemes[start].line}: identifier "{var.lexeme}" not defined') # ERROR identifier not found
+    
+    if start + 1 >= len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected "=" for assignment')
     operator = lexemes[start+1]
     if operator.lexeme != '=':
-        pass #TODO ERROR
+        raise SyntaxError(f'Line {lexemes[start].line}: expected "=" for assignment')
+    
+    if start + 2 >= len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected expression')
     expression_parts: List[Lexeme] = build_expression(lexemes, start+2)
     expression = parse_expression(expression_parts, varmap)
     varmap[var.lexeme] = expression
     return start + 2 + len(expression_parts)
 
 def parse_print(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
+    if start + 1 >= len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected ( after print')
     left_parenthesis = lexemes[start+1]
     if left_parenthesis.lexeme != '(':
-        pass #TODO: ERROR
+        raise SyntaxError(f'Line {lexemes[start].line}: expected ( after print')
+    
+    if start + 2 >= len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected expression')
+    if lexemes[start+2].lexeme == ')':
+        print()
+        return start + 3
     expression_parts = build_expression(lexemes, start+2)
     expression = parse_expression(expression_parts, varmap)
     print(expression)
@@ -162,9 +192,21 @@ def parse_if(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     while lexemes[keyword_index].lexeme != 'end':
         match lexemes[keyword_index].lexeme:
             case 'if' | 'elif':
+                if keyword_index + 1 >= len(lexemes):
+                    raise SyntaxError(f'Line {lexemes[keyword_index].line}: expected (')
                 left_parenthesis = lexemes[keyword_index+1]
+                if left_parenthesis.lexeme != '(':
+                    raise SyntaxError(f'Line {lexemes[keyword_index].line}: expected (')
+                
+                if keyword_index + 2 >= len(lexemes):
+                    raise SyntaxError(f'Line {lexemes[keyword_index].line}: expected expression')
                 expression_parts = build_expression(lexemes, keyword_index+2)
+
+                if keyword_index + 2 + len(expression_parts) >= len(lexemes):
+                    raise SyntaxError(f'Line {lexemes[keyword_index].line}: expected )')
                 right_parenthesis = lexemes[keyword_index+2+len(expression_parts)]
+                if right_parenthesis.lexeme != ')':
+                    raise SyntaxError(f'Line {lexemes[keyword_index].line}: expected )')
 
                 expression = parse_expression(expression_parts, varmap)
                 if expression is True:
@@ -173,7 +215,7 @@ def parse_if(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
                 elif expression is False:
                     keyword_index = find_end(lexemes, keyword_index + 3 + len(expression_parts), True)
                 else:
-                    pass #TODO ERROR expected bool
+                    raise TypeError(f'Line {lexemes[keyword_index].line}: expected boolean expression in "if" statement')
             case 'else':
                 start_execution = keyword_index + 1
                 break
@@ -189,9 +231,22 @@ def parse_if(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
         return find_end(lexemes, end_index) + 1
 
 def parse_while(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
+    if start + 1 > len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected (')
     left_parenthesis = lexemes[start+1]
+    if left_parenthesis.lexeme != '(':
+        raise SyntaxError(f'Line {lexemes[start].line}: expected (')
+
+    if start + 2 > len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected expression')
     expression_parts = build_expression(lexemes, start+2)
+
+    if start + start+2+len(expression_parts) > len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected )')
     right_parenthesis = lexemes[start+2+len(expression_parts)]
+    if right_parenthesis.lexeme != ')':
+        raise SyntaxError(f'Line {lexemes[start].line}: expected )')
+
     body_index = start + 3 + len(expression_parts)
 
     end_index = find_end(lexemes, body_index)
@@ -209,12 +264,32 @@ def parse_while(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
 def parse_for(lexemes: List[Lexeme], start: int, varmap: VarMap) -> int:
     varmap.open_scope() # dumb solution, but this is so the variable declared in for loop gets deleted
 
+    if start + 1 > len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected (')
     left_parenthesis = lexemes[start+1]
+    if left_parenthesis.lexeme != '(':
+        raise SyntaxError(f'Line {lexemes[start].line}: expected (')
+    
+    if start + 2 > len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected ;')
     semicolon1_index = parse_statement(lexemes, start + 2, varmap) # declare variable
+    if lexemes[semicolon1_index].lexeme != ';':
+        raise SyntaxError(f'Line {lexemes[start].line}: expected ;')
+    
+    if semicolon1_index + 1 > len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected expression')
     expression_parts = build_expression(lexemes, semicolon1_index + 1)
+
+    if len(expression_parts) + semicolon1_index + 1 > len(lexemes):
+        raise SyntaxError(f'Line {lexemes[start].line}: expected ;')
     semicolon2_index = len(expression_parts) + semicolon1_index + 1
+    if lexemes[semicolon2_index].lexeme != ';':
+        raise SyntaxError(f'Line {lexemes[start].line}: expected ;')
+
     statement_index = semicolon2_index + 1
     body_index = statement_index + 1 + len(build_expression(lexemes, statement_index))
+    if body_index - 1 > len(lexemes) or lexemes[body_index - 1].lexeme != ')':
+        raise SyntaxError(f'Line {lexemes[start].line}: expected )')
     # uses build_expression() to find ')'
 
     end_index = find_end(lexemes, body_index)
@@ -246,12 +321,15 @@ def find_end(lexemes: List[Lexeme], start: int, include_elif: bool = False) -> i
         elif lex.lexeme == 'end' and opened > 0:
             opened -= 1
         index += 1
+    raise SyntaxError(f'Line {lexemes[start].line}: expected "end"')
     
 def build_expression(lexemes: List[Lexeme], start: int) -> List[Lexeme]:
     expression = []
     parentheses = 0
     for lex in lexemes[start:]:
-        if lex.token == Token.NEWLINE or lex.lexeme == ';':
+        if lex.token is Token.KEYWORD:
+            raise SyntaxError(f'Line {lexemes[start].line}: invalid expression')
+        elif lex.token is Token.NEWLINE or lex.lexeme == ';':
             return expression
         elif lex.lexeme == ')' and parentheses <= 0:
             return expression
@@ -267,17 +345,17 @@ def build_expression(lexemes: List[Lexeme], start: int) -> List[Lexeme]:
 def parse_expression(parts: List[Lexeme], varmap: VarMap):
     output_stack: List[Lexeme] = []
     operator_stack: List[Lexeme] = []
+    
 
     for lex in parts:
         if lex.token is Token.LITERAL:
             output_stack.append(lex.lexeme)
         elif lex.token is Token.IDENTIFIER:
-            # assert that [identifier] is in varmap
+            if lex.lexeme not in varmap:
+                raise NameError(f'Line {lex.line}: identifier "{lex.lexeme}" not defined')
             output_stack.append(varmap[lex.lexeme])
         elif lex.token is Token.OPERATOR:
-            while operator_stack and operator_stack[-1] != '(' and Lexeme.has_lower_precedence(lex.lexeme, operator_stack[-1]):
-                
-                # output_stack.append(operator_stack.pop())
+            while operator_stack and operator_stack[-1] != '(' and not Lexeme.has_higher_precedence(lex.lexeme, operator_stack[-1]):
                 result = parse_operation(output_stack, operator_stack.pop())
                 output_stack.append(result)
             operator_stack.append(lex.lexeme)
@@ -285,14 +363,17 @@ def parse_expression(parts: List[Lexeme], varmap: VarMap):
             operator_stack.append(lex.lexeme)
         elif lex.lexeme == ')':
             while operator_stack[-1] != '(':
-                # output_stack.append(operator_stack.pop())
                 result = parse_operation(output_stack, operator_stack.pop())
                 output_stack.append(result)
             #assert there is a left parenthesis at the top of the operator stack
             operator_stack.pop()
     for operator in operator_stack[::-1]:
+        if operator == '(':
+            raise SyntaxError(f'Line {lex.line}: unclosed parentheses in expression')
         result = parse_operation(output_stack, operator)
         output_stack.append(result)
+    if len(output_stack) != 1:
+        raise SyntaxError(f'Line {lex.line}: invalid expression')
     return output_stack[0]
 
 def parse_operation(output_stack: List[Lexeme], operator: str):
@@ -317,19 +398,25 @@ def parse_operation(output_stack: List[Lexeme], operator: str):
     else:
         term2 = output_stack.pop()
         term1 = output_stack.pop()
-        return operations[operator](term1, term2)
+        if type(term1) is str or type(term2) is str:
+            term1 = str(term1)
+            term2 = str(term2)
+        answer = operations[operator](term1, term2)
+        if type(answer) is float and answer.is_integer():
+            answer = int(answer)
+        return answer
 
 def main():
+    if len(sys.argv) < 2:
+        return
+    file_path = sys.argv[1]
     with open(file_path, 'r') as file:
         code = file.read()
 
-        # for i, char in enumerate(code):
-        #     print(f'[{i}: {repr(char)}]')
-
         lexemes: List[Lexeme] = code_to_lexemes(code)
-        print('--parsing--')
+        # print('--parsing--')
         parse_program(lexemes)
-        print('--done parsing--')
+        # print('--done parsing--')
 
 if __name__ == '__main__':
     main()

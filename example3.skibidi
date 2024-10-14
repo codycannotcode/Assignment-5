@@ -1,0 +1,26 @@
+print("Let's practice order of operations!")
+
+print("In mathematical expressions, muliplication goes before addition.")
+print("What is 4 + 3 * 2?")
+var ans = 4 + 3 * 2
+print("Answer: " + ans)
+
+print("If we have parenthesis, such as (4 + 3) * 2, then whatever's inside goes first")
+ans = (4 + 3) * 2
+print("Answer: " + ans)
+
+print("Let's try something harder.")
+print("What is 18 / 3 - 7 + 2 * 5?")
+ans = 18 / 3 - 7 + 2 * 5
+print("Answer: " + ans)
+
+print("Did you know there is an order of operations for logical operators?")
+print('The "and" operator goes before "or"')
+print('For example: "True or False and False" evaluates to:')
+ans = true or false and false
+print(ans)
+print('While "(True or False) and False" evaluates to:')
+ans = (true or false) and false
+print(ans)
+
+print("Thanks for practicing with me!")
